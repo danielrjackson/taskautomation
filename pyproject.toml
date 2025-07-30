@@ -9,7 +9,7 @@ requires-python = "~=3.13"
 readme = { file = "README.md", content-type = "text/markdown" }
 license = { file = "LICENSE.md" }
 dependencies = [
-  "PyYAML~=6.0.2",        # YAML parser and emitter
+  "pyyaml~=6.0.2", # YAML parser and emitter
   "types-PyYAML~=6.0.12", # Type stubs for PyYAML
 ]
 
@@ -30,9 +30,9 @@ exclude = [".git", ".venv", ".pytest_cache", "__pycache__"]
 
 [tool.ruff.lint]
 extend-select = [
-  "E",  # pycodestyle (style guide enforcement)
-  "B",  # bugbear (unnecessary complexity)
-  "I",  # isort (import sorting),
+  "E",   # pycodestyle (style guide enforcement)
+  "B",   # bugbear (unnecessary complexity)
+  "I",   # isort (import sorting)
   "UP",  # pyupgrade (code modernizations)
   "C90", # mccabe (complexity)
   "D",   # pydocstyle (docstring conventions)
@@ -48,11 +48,11 @@ preview = true
 [tool.uv]
 package = false
 dev-dependencies = [
-  "coverage~=7.7.1",      # Test coverage report
-  "hypothesis~=6.130.4",  # Fuzzy testing
-  "mypy~=1.17.0",         # Optional static type checker
-  "pydantic~=2.9.0",      # Data validation and parsing
-  "pytest~=7.4.4",        # Python testing library
-  "pytest-cov~=6.2.1",    # Pytest coverage plugin
-  "ruff~=0.12.6",         # Fast Python linter
+  "coverage~=7.7.1",     # Test coverage report
+  "hypothesis~=6.130.4", # Fuzzy testing
+  "mypy~=1.17.0",        # Optional static type checker
+  "pydantic~=2.9.0",     # Data validation and parsing
+  "pytest~=7.4.4",       # Python testing library
+  "pytest-cov~=6.2.1",   # Pytest coverage plugin
+  "ruff~=0.12.6",        # Fast Python linter
 ]

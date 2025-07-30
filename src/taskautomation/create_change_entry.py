@@ -15,12 +15,42 @@ import re
 import subprocess
 import sys
 import tomllib
+from typing import NamedTuple
 
-ROOT = pathlib.Path(__file__).resolve().parent
-TEMPLATE = ROOT / "docs" / "templates" / "changelog" / "template.md"
-CHANGELOG_DIR = ROOT / "docs" / "changelog"
-TASKS_MD = ROOT / "docs" / "TASKS.md"
-PYPROJECT = ROOT / "pyproject.toml"
+
+class OperationResult(NamedTuple):
+    """Result of an operation with success status and details."""
+
+    success: bool
+    exit_code: int
+    message: str
+
+
+# Default paths - can be overridden for testing
+def get_default_root():
+    """Get default root directory."""
+    return pathlib.Path(__file__).resolve().parent
+
+
+def get_paths(root_override=None):
+    """Get all file paths, with optional root override for testing."""
+    root = pathlib.Path(root_override) if root_override else get_default_root()
+    return {
+        "ROOT": root,
+        "TEMPLATE": root / "docs" / "templates" / "changelog" / "template.md",
+        "CHANGELOG_DIR": root / "docs" / "changelog",
+        "TASKS_MD": root / "docs" / "TASKS.md",
+        "PYPROJECT": root / "pyproject.toml",
+    }
+
+
+# Default paths for backward compatibility
+_DEFAULT_PATHS = get_paths()
+ROOT = _DEFAULT_PATHS["ROOT"]
+TEMPLATE = _DEFAULT_PATHS["TEMPLATE"]
+CHANGELOG_DIR = _DEFAULT_PATHS["CHANGELOG_DIR"]
+TASKS_MD = _DEFAULT_PATHS["TASKS_MD"]
+PYPROJECT = _DEFAULT_PATHS["PYPROJECT"]
 
 # ------------------------------------------------------------------------------------------------ #
 
@@ -93,22 +123,60 @@ def branch() -> str:
         return "unknown-branch"
 
 
-def version() -> tuple[str, str]:
+def get_version(pyproject_path=None) -> tuple[str, str]:
     """
     Retrieve the project version from the pyproject.toml file.
 
-    Returns:
+    Parameters
+    ----------
+    pyproject_path : str | pathlib.Path | None
+        Path to pyproject.toml file. If None, uses default PYPROJECT constant.
+
+    Returns
+    -------
         tuple[str, str]
             A tuple containing the version string (e.g., "1.2.3") and a variant with dots replaced
             by hyphens (e.g., "1-2-3"). If the version cannot be determined,
             returns ("0.0.0", "0-0-0").
     """
+    pyproject_file = pathlib.Path(pyproject_path) if pyproject_path else PYPROJECT
     try:
-        v = tomllib.loads(PYPROJECT.read_text())["project"]["version"]
+        v = tomllib.loads(pyproject_file.read_text())["project"]["version"]
     except (FileNotFoundError, tomllib.TOMLDecodeError, KeyError) as e:
         print(f"Warning: Could not read version from pyproject.toml: {e}", file=sys.stderr)
         v = "0.0.0"
     return v, v.replace(".", "-")
+
+
+def version(root_override=None) -> OperationResult:
+    """
+    Get project version with configurable root path - returns OperationResult for testing.
+
+    Parameters
+    ----------
+    root_override : str | pathlib.Path | None
+        Override root directory for testing.
+
+    Returns
+    -------
+    OperationResult
+        Result with version information in message.
+    """
+    try:
+        paths = get_paths(root_override)
+        pyproject_file = paths["PYPROJECT"]
+
+        if not pyproject_file.exists():
+            return OperationResult(
+                success=False, exit_code=1, message=f"pyproject.toml not found: {pyproject_file}"
+            )
+
+        ver, ver_slug = get_version(pyproject_file)
+        return OperationResult(
+            success=True, exit_code=0, message=f"Version: {ver} (slug: {ver_slug})"
+        )
+    except Exception as e:
+        return OperationResult(success=False, exit_code=1, message=f"Error getting version: {e}")
 
 
 def utc_slug() -> str:
@@ -123,19 +191,57 @@ def utc_slug() -> str:
     return _dt.datetime.now(_dt.UTC).strftime("%Y%m%dT%H%M%SZ")
 
 
-def first_task() -> str | None:
+def get_first_task(tasks_md_path=None) -> str | None:
     """
     Retrieve the first unchecked task from the TASKS.md file.
+
+    Parameters
+    ----------
+    tasks_md_path : str | pathlib.Path | None
+        Path to TASKS.md file. If None, uses default TASKS_MD constant.
 
     Returns
     -------
     str | None
         The description of the first unchecked task, or None if not found or file does not exist.
     """
-    if not TASKS_MD.exists():
+    tasks_file = pathlib.Path(tasks_md_path) if tasks_md_path else TASKS_MD
+    if not tasks_file.exists():
         return None
-    m = re.search(r"^- \[ \] \*\*(.+?)\*\*:", TASKS_MD.read_text(), re.M)
+    m = re.search(r"^- \[ \] \*\*(.+?)\*\*:", tasks_file.read_text(), re.M)
     return m.group(1) if m else None
+
+
+def first_task(root_override=None) -> OperationResult:
+    """
+    Get first unchecked task with configurable root path - returns OperationResult for testing.
+
+    Parameters
+    ----------
+    root_override : str | pathlib.Path | None
+        Override root directory for testing.
+
+    Returns
+    -------
+    OperationResult
+        Result with first task information in message.
+    """
+    try:
+        paths = get_paths(root_override)
+        tasks_file = paths["TASKS_MD"]
+
+        if not tasks_file.exists():
+            return OperationResult(
+                success=False, exit_code=1, message=f"TASKS.md not found: {tasks_file}"
+            )
+
+        task = get_first_task(tasks_file)
+        if task:
+            return OperationResult(success=True, exit_code=0, message=f"First task: {task}")
+        else:
+            return OperationResult(success=True, exit_code=0, message="No unchecked tasks found")
+    except Exception as e:
+        return OperationResult(success=False, exit_code=1, message=f"Error getting first task: {e}")
 
 
 # --------------------------------------------------------------------------- #
@@ -193,7 +299,7 @@ def render(raw: str, **kw) -> str:
 
 
 # --------------------------------------------------------------------------- #
-def main(argv=None):
+def main(argv=None, root_override=None):
     """
     Create a changelog entry file from command-line arguments.
 
@@ -201,12 +307,22 @@ def main(argv=None):
     ----------
     argv : list[str] or None
         Command-line arguments to parse (default: None, uses sys.argv).
+    root_override : str | pathlib.Path | None
+        Override root directory for testing. If None, uses default paths.
 
     Returns
     -------
     None
 
     """
+    # Get configurable paths
+    paths = get_paths(root_override)
+    template = paths["TEMPLATE"]
+    changelog_dir = paths["CHANGELOG_DIR"]
+    tasks_md = paths["TASKS_MD"]
+    pyproject = paths["PYPROJECT"]
+    root = paths["ROOT"]
+
     ap = argparse.ArgumentParser()
     ap.add_argument("--change-title")
     ap.add_argument("--author-name")
@@ -218,7 +334,7 @@ def main(argv=None):
     ap.add_argument("--skip-coverage", action="store_true")
     args = ap.parse_args(argv)
 
-    br, (ver, vslug), dt = branch(), version(), utc_slug()
+    br, (ver, vslug), dt = branch(), get_version(pyproject), utc_slug()
 
     # run tests (unless skipped or cov supplied)
     coverage, fail_lines = (
@@ -233,7 +349,7 @@ def main(argv=None):
         bullet = "\n          ".join(fail_lines)
         desc = f"- [ ] **Fix failing tests**\n          {bullet}"
     else:
-        task = first_task()
+        task = get_first_task(tasks_md)
         if task:
             desc = f"Addresses task: {task}"
 
@@ -258,15 +374,15 @@ def main(argv=None):
     )
 
     # Check if template file exists
-    if not TEMPLATE.exists():
-        print(f"Error: Template file not found: {TEMPLATE}", file=sys.stderr)
+    if not template.exists():
+        print(f"Error: Template file not found: {template}", file=sys.stderr)
         sys.exit(1)
 
-    CHANGELOG_DIR.mkdir(parents=True, exist_ok=True)
+    changelog_dir.mkdir(parents=True, exist_ok=True)
     fname = f"{br}_{vslug}_{dt}.md"
-    out = CHANGELOG_DIR / fname
-    out.write_text(render(TEMPLATE.read_text(), **fields))
-    print(out.relative_to(ROOT))  # required output
+    out = changelog_dir / fname
+    out.write_text(render(template.read_text(), **fields))
+    print(out.relative_to(root))  # required output
 
 
 if __name__ == "__main__":

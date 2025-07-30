@@ -45,8 +45,23 @@ import sys
 import textwrap
 from typing import NamedTuple
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
-TASKS = ROOT / "docs" / "TASKS.md"
+
+# Default paths - can be overridden for testing
+def get_default_root():
+    """Get default root directory."""
+    return pathlib.Path(__file__).resolve().parent.parent.parent
+
+
+def get_paths(root_override=None):
+    """Get all file paths, with optional root override for testing."""
+    root = pathlib.Path(root_override) if root_override else get_default_root()
+    return {"ROOT": root, "TASKS": root / "docs" / "TASKS.md"}
+
+
+# Default paths for backward compatibility
+_DEFAULT_PATHS = get_paths()
+ROOT = _DEFAULT_PATHS["ROOT"]
+TASKS = _DEFAULT_PATHS["TASKS"]
 
 # Regex patterns for parsing pytest output
 FAIL_RE = re.compile(r"^(.+?)::(.+?) FAILED", re.M)  # capture file path and test name
@@ -513,6 +528,7 @@ def update_tasks_file(  # noqa: C901
     current_results: dict[str, dict[str, str]],
     existing_tasks: dict[str, TaskInfo],
     dry_run: bool = True,
+    tasks_file: pathlib.Path | None = None,
 ) -> bool:
     """
     Update the TASKS.md file with current test results organized by priority.
@@ -525,16 +541,19 @@ def update_tasks_file(  # noqa: C901
         Existing tasks from TASKS.md
     dry_run : bool, optional
         If True, don't actually write the file
+    tasks_file : pathlib.Path, optional
+        Path to tasks file. If None, uses default TASKS constant.
 
     Returns
     -------
     bool
         True if changes were made (or would be made)
     """
-    TASKS.parent.mkdir(parents=True, exist_ok=True)
+    tasks_path = tasks_file if tasks_file is not None else TASKS
+    tasks_path.parent.mkdir(parents=True, exist_ok=True)
 
-    if TASKS.exists():
-        original_text = TASKS.read_text()
+    if tasks_path.exists():
+        original_text = tasks_path.read_text()
     else:
         original_text = (
             "# taskautomation Task List\n\n## Instructions\n\n"
@@ -591,11 +610,11 @@ def update_tasks_file(  # noqa: C901
     if not dry_run:
         # Organize tasks by priority sections
         new_content = organize_tasks_by_priority(new_blocks, original_text)
-        TASKS.write_text(new_content)
+        tasks_path.write_text(new_content)
 
         # Run ruff formatter on the updated file
         try:
-            run("ruff format " + str(TASKS))
+            run("ruff format " + str(tasks_path))
         except Exception:
             pass  # Don't fail if ruff isn't available
 
@@ -630,7 +649,7 @@ def build_pytest_command(coverage_mode: str, pytest_args: list[str]) -> str:
     return " ".join(base_cmd)
 
 
-def main(argv=None):  # noqa: C901
+def main(argv=None, root_override=None):  # noqa: C901
     """
     Run the enhanced test runner with task management.
 
@@ -638,14 +657,20 @@ def main(argv=None):  # noqa: C901
     ----------
     argv : list[str] | None, optional
         Command line arguments to parse. If None, uses sys.argv
+    root_override : str | pathlib.Path | None, optional
+        Override root directory for testing. If None, uses default paths.
     """
+    # Get configurable paths
+    paths = get_paths(root_override)
+    tasks_file = paths["TASKS"]
+
     parser = argparse.ArgumentParser(
         description="Enhanced test runner with task management",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=textwrap.dedent("""
         Examples:
           %(prog)s                              # Report mode with terminal coverage
-          %(prog)s --update-tasks               # Update TASKS.md with terminal coverage  
+          %(prog)s --update-tasks               # Update TASKS.md with terminal coverage
           %(prog)s --coverage html              # Report mode with HTML coverage
           %(prog)s --quiet --update-tasks       # Update TASKS.md quietly
           %(prog)s -- -v -x                     # Forward -v -x to pytest
@@ -683,8 +708,8 @@ def main(argv=None):  # noqa: C901
 
     # Parse existing tasks
     existing_tasks = {}
-    if TASKS.exists():
-        task_text = TASKS.read_text()
+    if tasks_file.exists():
+        task_text = tasks_file.read_text()
         existing_tasks = parse_existing_tasks(task_text)
 
     # Generate report
@@ -711,7 +736,9 @@ def main(argv=None):  # noqa: C901
             print("\n✓ All tests passing, no task updates needed")
 
     # Update tasks file
-    changes_made = update_tasks_file(current_results, existing_tasks, dry_run=not args.update_tasks)
+    changes_made = update_tasks_file(
+        current_results, existing_tasks, dry_run=not args.update_tasks, tasks_file=tasks_file
+    )
 
     if not args.quiet:
         if args.update_tasks:

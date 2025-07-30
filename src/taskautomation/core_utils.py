@@ -11,7 +11,45 @@ from __future__ import annotations
 import datetime
 import pathlib
 import re
+import subprocess
 from typing import NamedTuple
+
+# Import and re-export items from other modules for test compatibility
+from .task_schema import Priority, TaskStatus
+from .task_types import ExitCode, OperationResult, ValidationResult
+
+# Explicitly make imported items available for re-export
+__all__ = [
+    # Imported enums and classes
+    "Priority",
+    "TaskStatus",
+    "ExitCode",
+    "OperationResult",
+    "ValidationResult",
+    # Path constants
+    "ROOT",
+    "TASKS_FILE",
+    "BACKUP_DIR",
+    "ROOT_DIR",
+    "DOCS_DIR",
+    "SRC_DIR",
+    "PLANNING_DIR",
+    # Regex patterns
+    "TASK_BLOCK_RE",
+    "SUBTASK_RE",
+    "ID_RE",
+    "PRIORITY_SECTION_RE",
+    "ARCHIVE_SECTION_RE",
+    "METADATA_RE",
+    "DATETIME_RE",
+    # Data structures
+    "TaskInfo",
+    # Functions
+    "get_current_datetime",
+    "format_iso8601_datetime",
+    "get_git_root",
+    "find_tasks_by_criteria",
+]
 
 # =============================================================================
 # Path Constants and Configuration
@@ -20,6 +58,12 @@ from typing import NamedTuple
 ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 TASKS_FILE = ROOT / "docs" / "TASKS.md"
 BACKUP_DIR = ROOT / ".task_backups"
+
+# Additional directory constants expected by tests
+ROOT_DIR = ROOT
+DOCS_DIR = ROOT / "docs"
+SRC_DIR = ROOT / "src"
+PLANNING_DIR = ROOT / "planning"
 
 
 # =============================================================================
@@ -74,6 +118,59 @@ def get_current_datetime() -> str:
         Current datetime string
     """
     return datetime.datetime.now(datetime.UTC).isoformat().replace("+00:00", "Z")
+
+
+def format_iso8601_datetime(dt: datetime.datetime | None = None) -> str:
+    """
+    Format datetime as ISO8601 string with Z suffix.
+
+    Args:
+        dt: Datetime to format, defaults to current time
+
+    Returns:
+        ISO8601 formatted datetime string with Z suffix
+    """
+    if dt is None:
+        dt = datetime.datetime.now(datetime.UTC)
+
+    # Handle naive datetime objects by treating them as UTC
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=datetime.UTC)
+
+    # Format and ensure Z suffix for UTC
+    formatted = dt.isoformat()
+    if formatted.endswith("+00:00"):
+        formatted = formatted.replace("+00:00", "Z")
+    elif dt.tzinfo == datetime.UTC and not formatted.endswith("Z"):
+        formatted += "Z"
+
+    return formatted
+
+
+def get_git_root(path: pathlib.Path | None = None) -> pathlib.Path | None:
+    """
+    Find the git repository root directory.
+
+    Args:
+        path: Starting path to search from, defaults to current directory
+
+    Returns:
+        Path to git root or None if not in a git repository
+    """
+    if path is None:
+        path = pathlib.Path.cwd()
+
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=path,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return pathlib.Path(result.stdout.strip())
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
 
 
 # =============================================================================

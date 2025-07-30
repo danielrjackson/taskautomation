@@ -208,3 +208,7 @@ __marimo__/
 
 # Roo Code
 .roo/
+
+# Test cache directory - exclude contents but keep structure
+tests/cache/*
+!tests/cache/.gitkeep

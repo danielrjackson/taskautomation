@@ -19,6 +19,23 @@ from .core_utils import DATETIME_RE, TaskInfo
 from .git_helpers import get_git_info, run_git_command
 from .task_types import ValidationResult
 
+# Export list for backward compatibility
+__all__ = [
+    "validate_task_data",
+    "validate_tasks_file",
+    "verify_operation_safety",
+    "validate_prerequisites",
+    "extract_assignee",
+    "extract_create_date",
+    "extract_description",
+    "extract_finished_date",
+    "extract_task_id",
+    "extract_priority",
+    "is_valid_task_line",
+    "validate_task_format",
+    "validate_task_schema",
+]
+
 # =============================================================================
 # Task Validation Functions
 # =============================================================================
@@ -254,6 +271,339 @@ def validate_prerequisites(root_path: pathlib.Path) -> ValidationResult:
         context["is_git_repo"] = is_repo
         if not is_repo:
             warnings.append("Not in a git repository - some features may not work")
+
+    return ValidationResult(
+        is_valid=len(errors) == 0, errors=errors, warnings=warnings, context=context
+    )
+
+
+def extract_assignee(task_content: str) -> str:
+    """
+    Extract assignee information from task content.
+
+    Args:
+        task_content: The task content to extract assignee from
+
+    Returns:
+        The assignee name or empty string if not found
+
+    Note:
+        This is a basic implementation for backward compatibility.
+        Looks for patterns like "Assignee: name" or "@username"
+    """
+    import re
+
+    # Look for "Assignee: name" pattern
+    assignee_match = re.search(r"Assignee:\s*([^\n]+)", task_content, re.IGNORECASE)
+    if assignee_match:
+        return assignee_match.group(1).strip()
+
+    # Look for @username pattern
+    at_match = re.search(r"@([a-zA-Z0-9_-]+)", task_content)
+    if at_match:
+        return at_match.group(1)
+
+    return ""
+
+
+def extract_create_date(task_content: str) -> str:
+    """
+    Extract create date information from task content.
+
+    Args:
+        task_content: The task content to extract create date from
+
+    Returns:
+        The create date in ISO8601 format or empty string if not found
+
+    Note:
+        This is a basic implementation for backward compatibility.
+        Looks for patterns like "Create Date: YYYY-MM-DD" or similar.
+    """
+    import re
+
+    # Look for "Create Date: date" pattern
+    create_date_match = re.search(r"Create\s+Date:\s*([^\n]+)", task_content, re.IGNORECASE)
+    if create_date_match:
+        date_str = create_date_match.group(1).strip()
+        # Basic validation - should match ISO8601-like format
+        if re.match(r"\d{4}-\d{2}-\d{2}", date_str):
+            return date_str
+
+    # Look for "Created: date" pattern
+    created_match = re.search(r"Created:\s*([^\n]+)", task_content, re.IGNORECASE)
+    if created_match:
+        date_str = created_match.group(1).strip()
+        if re.match(r"\d{4}-\d{2}-\d{2}", date_str):
+            return date_str
+
+    return ""
+
+
+def extract_description(task_content: str) -> str:
+    """
+    Extract task description from task content.
+
+    Args:
+        task_content: Raw task content string
+
+    Returns:
+        str: Extracted description or empty string if not found
+    """
+    if not task_content or not isinstance(task_content, str):
+        return ""
+
+    # Remove leading/trailing whitespace and return as description
+    description = task_content.strip()
+
+    # Remove any markdown formatting for basic description
+    # This is a simple implementation - could be enhanced for more complex parsing
+    import re
+
+    description = re.sub(r"^#+\s*", "", description)  # Remove heading markers
+    description = re.sub(r"\*\*(.*?)\*\*", r"\1", description)  # Remove bold
+    description = re.sub(r"\*(.*?)\*", r"\1", description)  # Remove italic
+
+    return description
+
+
+def extract_finished_date(task_content: str) -> str:
+    """
+    Extract finished date information from task content.
+
+    Args:
+        task_content: The task content to extract finished date from
+
+    Returns:
+        The finished date in ISO8601 format or empty string if not found
+
+    Note:
+        This is a basic implementation for backward compatibility.
+        Looks for patterns like "Finished Date: YYYY-MM-DD" or similar.
+    """
+    import re
+
+    # Look for "Finished Date: date" pattern
+    finished_date_match = re.search(r"Finished\s+Date:\s*([^\n]+)", task_content, re.IGNORECASE)
+    if finished_date_match:
+        date_str = finished_date_match.group(1).strip()
+        # Basic validation - should match ISO8601-like format
+        if re.match(r"\d{4}-\d{2}-\d{2}", date_str):
+            return date_str
+
+    # Look for "Completed: date" pattern
+    completed_match = re.search(r"Completed:\s*([^\n]+)", task_content, re.IGNORECASE)
+    if completed_match:
+        date_str = completed_match.group(1).strip()
+        if re.match(r"\d{4}-\d{2}-\d{2}", date_str):
+            return date_str
+
+    # Look for "Finished: date" pattern
+    finished_match = re.search(r"Finished:\s*([^\n]+)", task_content, re.IGNORECASE)
+    if finished_match:
+        date_str = finished_match.group(1).strip()
+        if re.match(r"\d{4}-\d{2}-\d{2}", date_str):
+            return date_str
+
+    return ""
+
+
+def extract_task_id(task_content: str) -> str:
+    """
+    Extract task ID information from task content.
+
+    Args:
+        task_content: The task content to extract task ID from
+
+    Returns:
+        The task ID or empty string if not found
+
+    Note:
+        This is a basic implementation for backward compatibility.
+        Looks for patterns like "ID: T-123" or similar.
+    """
+    import re
+
+    # Look for "ID: identifier" pattern
+    id_match = re.search(r"ID:\s*([^\n\s]+)", task_content, re.IGNORECASE)
+    if id_match:
+        return id_match.group(1).strip()
+
+    # Look for "Task ID: identifier" pattern
+    task_id_match = re.search(r"Task\s+ID:\s*([^\n\s]+)", task_content, re.IGNORECASE)
+    if task_id_match:
+        return task_id_match.group(1).strip()
+
+    # Look for bracketed ID like [T-123]
+    bracket_match = re.search(r"\[([A-Z]+-\d+)\]", task_content)
+    if bracket_match:
+        return bracket_match.group(1)
+
+    # Look for T-### pattern
+    t_pattern_match = re.search(r"(T-\d+)", task_content)
+    if t_pattern_match:
+        return t_pattern_match.group(1)
+
+    return ""
+
+
+def is_valid_task_line(line: str) -> bool:
+    """
+    Check if a line represents a valid task format.
+
+    Args:
+        line: The line to validate
+
+    Returns:
+        bool: True if the line is a valid task line, False otherwise
+
+    Note:
+        This is a basic implementation for backward compatibility.
+        Checks for common task line patterns.
+    """
+    import re
+
+    if not line or not isinstance(line, str):
+        return False
+
+    line = line.strip()
+
+    # Check for markdown checklist format
+    if re.match(r"^[\s]*[-*+]\s*\[[\sx]\]", line):
+        return True
+
+    # Check for numbered task format
+    if re.match(r"^[\s]*\d+\.\s+", line):
+        return True
+
+    # Check for basic task indicators
+    task_indicators = ["TODO:", "TASK:", "Action:", "Do:", "- [ ]", "- [x]"]
+    for indicator in task_indicators:
+        if indicator.lower() in line.lower():
+            return True
+
+    # Check for task ID patterns
+    if re.search(r"(T-\d+|ID:\s*\w+)", line):
+        return True
+
+    return False
+
+
+def extract_priority(task_content: str) -> str:
+    """
+    Extract priority information from task content.
+
+    Args:
+        task_content: The task content to extract priority from
+
+    Returns:
+        The priority level or empty string if not found
+
+    Note:
+        This is a basic implementation for backward compatibility.
+        Looks for patterns like "Priority: High" or similar.
+    """
+    import re
+
+    # Look for "Priority: level" pattern
+    priority_match = re.search(r"Priority:\s*([^\n]+)", task_content, re.IGNORECASE)
+    if priority_match:
+        priority_str = priority_match.group(1).strip()
+        # Normalize common priority values
+        priority_lower = priority_str.lower()
+        if priority_lower in ["high", "medium", "low", "critical", "urgent"]:
+            return priority_str.title()  # Return with proper capitalization
+
+    # Look for bracketed priority like [HIGH], [MEDIUM], [LOW]
+    bracket_match = re.search(r"\[([A-Z]+)\]", task_content)
+    if bracket_match:
+        priority_str = bracket_match.group(1)
+        priority_lower = priority_str.lower()
+        if priority_lower in ["high", "medium", "low", "critical", "urgent"]:
+            return priority_str.title()
+
+    return ""
+
+
+def validate_task_format(task_line: str) -> bool:
+    """
+    Validate that a task line follows the correct format.
+
+    Args:
+        task_line: The task line to validate
+
+    Returns:
+        bool: True if the task line is properly formatted, False otherwise
+
+    Note:
+        This is a basic implementation for backward compatibility.
+        Validates common task formats including markdown checkboxes,
+        numbered lists, and TODO/TASK indicators.
+    """
+    if not task_line or not isinstance(task_line, str):
+        return False
+
+    # Use the existing is_valid_task_line function for validation
+    return is_valid_task_line(task_line)
+
+
+def validate_task_schema(task_data: dict) -> ValidationResult:
+    """
+    Validate that task data conforms to the expected schema.
+
+    Args:
+        task_data: Dictionary containing task data to validate
+
+    Returns:
+        ValidationResult: Result of schema validation
+
+    Note:
+        This is a basic implementation for backward compatibility.
+        Validates common task schema requirements.
+    """
+    errors = []
+    warnings = []
+    context = {"validation_type": "schema", "task_data_keys": list(task_data.keys())}
+
+    if not isinstance(task_data, dict):
+        errors.append("Task data must be a dictionary")
+        return ValidationResult(False, errors, warnings, context)
+
+    # Check for required fields
+    required_fields = ["title", "task_id"]
+    for field in required_fields:
+        if field not in task_data:
+            errors.append(f"Required field missing: {field}")
+        elif not task_data[field]:
+            errors.append(f"Required field cannot be empty: {field}")
+
+    # Validate task_id is numeric if present
+    if "task_id" in task_data:
+        try:
+            task_id = int(task_data["task_id"])
+            if task_id <= 0:
+                errors.append("Task ID must be a positive integer")
+        except (ValueError, TypeError):
+            errors.append("Task ID must be numeric")
+
+    # Validate priority if present
+    if "priority" in task_data:
+        valid_priorities = {"Critical", "High", "Medium", "Low"}
+        if task_data["priority"] not in valid_priorities:
+            errors.append(f"Priority must be one of {valid_priorities}")
+
+    # Validate status if present
+    if "status" in task_data:
+        valid_statuses = {"todo", "in_progress", "done", "cancelled"}
+        if task_data["status"] not in valid_statuses:
+            warnings.append(f"Status should be one of {valid_statuses}")
+
+    # Validate date fields if present
+    date_fields = ["create_date", "start_date", "finish_date"]
+    for field in date_fields:
+        if field in task_data and task_data[field]:
+            if not DATETIME_RE.match(task_data[field]):
+                errors.append(f"{field} must be in ISO8601 format")
 
     return ValidationResult(
         is_valid=len(errors) == 0, errors=errors, warnings=warnings, context=context

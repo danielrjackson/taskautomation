@@ -87,6 +87,12 @@ def parse_existing_tasks(task_text: str) -> dict[str, TaskInfo]:
                             task_data["task_id"] = int(value)
                         except ValueError:
                             task_data["task_id"] = -1
+                    elif key == "finished_date":
+                        # Map "finished_date" to the correct TaskInfo field "finish_date"
+                        if value.lower() in ("none", ""):
+                            task_data["finish_date"] = None
+                        else:
+                            task_data["finish_date"] = value
                     elif key in task_data:
                         if value.lower() in ("none", ""):
                             task_data[key] = None
@@ -187,3 +193,54 @@ def format_task_block(task: TaskInfo, updated_subtasks: dict[str, bool] | None =
         lines.append("    - None")
 
     return "\n".join(lines) + "\n"
+
+
+def convert_legacy_to_new_format(legacy_content: str) -> str:
+    """
+    Convert legacy task format to new standardized format.
+
+    Args:
+        legacy_content: Content in legacy format
+
+    Returns:
+        Content converted to new format
+
+    Note:
+        This is a placeholder function for backward compatibility.
+        In practice, the current format IS the legacy format being preserved.
+    """
+    # For now, just return the content as-is since we're preserving the legacy format
+    return legacy_content
+
+
+def parse_legacy_task_format(content: str) -> dict[str, Any]:
+    """
+    Parse legacy task format from markdown content.
+
+    Args:
+        content: Markdown content in legacy format
+
+    Returns:
+        Dictionary of parsed tasks with task IDs as keys
+
+    Note:
+        This function delegates to parse_markdown_tasks for backward compatibility.
+    """
+    # Use the existing parse_markdown_tasks function
+    return parse_existing_tasks(content)
+
+
+def parse_tasks_from_markdown(content: str) -> dict[str, Any]:
+    """
+    Parse tasks from markdown content.
+
+    Args:
+        content: Markdown content to parse
+
+    Returns:
+        Dictionary of parsed tasks with task IDs as keys
+
+    Note:
+        This function delegates to parse_existing_tasks for backward compatibility.
+    """
+    return parse_existing_tasks(content)

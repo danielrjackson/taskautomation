@@ -28,6 +28,7 @@ Options:
 from __future__ import annotations
 
 import argparse
+import pathlib
 import sys
 import traceback
 from collections.abc import Callable
@@ -36,17 +37,17 @@ from collections.abc import Callable
 
 try:
     from .task_utils import (
-        ROOT,
-        TASKS_FILE,
         ExitCode,
         OperationResult,
         TaskInfo,
         ValidationResult,
         create_structured_error,
         get_current_datetime,
+        get_default_root,
         get_git_info,
         load_tasks_file,
         output_result,
+        parse_existing_tasks,
         validate_prerequisites,
         validate_task_data,
         validate_tasks_file,
@@ -58,14 +59,35 @@ except ImportError as e:
     sys.exit(3)
 
 
+def get_paths(root_override=None):
+    """
+    Get configurable paths for validation script.
+
+    Args:
+        root_override: Optional root directory override for testing
+
+    Returns:
+        Dictionary containing all required paths
+    """
+    root = pathlib.Path(root_override) if root_override else pathlib.Path(get_default_root())
+    return {
+        "ROOT": root,
+        "TASKS_FILE": root / "docs" / "TASKS.md",
+        "SRC_DIR": root / "src" / "taskautomation",
+        "DOCS_DIR": root / "docs",
+        "PLANNING_DIR": root / "docs" / "planning",
+    }
+
+
 class AutomationValidator:
     """Comprehensive validator for the task automation system."""
 
-    def __init__(self, quiet: bool = False, format_type: str = "human"):
+    def __init__(self, quiet: bool = False, format_type: str = "human", root_override=None):
         self.quiet = quiet
         self.format_type = format_type
         self.results: list[OperationResult] = []
         self.overall_success = True
+        self.paths = get_paths(root_override)
 
     def log_result(self, result: OperationResult) -> None:
         """Log a validation result."""
@@ -134,9 +156,9 @@ class AutomationValidator:
 
         # Check required files
         required_files = [
-            ROOT / "src" / "taskautomation" / "task_utils.py",
-            ROOT / "src" / "taskautomation" / "run_tests.py",
-            ROOT / "src" / "taskautomation" / "create_change_entry.py",
+            self.paths["SRC_DIR"] / "task_utils.py",
+            self.paths["SRC_DIR"] / "run_tests.py",
+            self.paths["SRC_DIR"] / "create_change_entry.py",
         ]
 
         for file_path in required_files:
@@ -148,7 +170,7 @@ class AutomationValidator:
                 context[f"found_{file_path.name}"] = True
 
         # Check optional files
-        optional_files = [TASKS_FILE]
+        optional_files = [self.paths["TASKS_FILE"]]
         for file_path in optional_files:
             if not file_path.exists():
                 warnings.append(f"Optional file missing: {file_path}")
@@ -157,9 +179,9 @@ class AutomationValidator:
 
         # Check required directories
         required_dirs = [
-            ROOT / "docs",
-            ROOT / "src" / "taskautomation",
-            ROOT / "docs" / "planning",
+            self.paths["DOCS_DIR"],
+            self.paths["SRC_DIR"],
+            self.paths["PLANNING_DIR"],
         ]
 
         for dir_path in required_dirs:
@@ -245,7 +267,7 @@ class AutomationValidator:
 
         # Test prerequisite validation
         try:
-            prereq_result = validate_prerequisites(ROOT)
+            prereq_result = validate_prerequisites(self.paths["ROOT"])
             context["prerequisite_validation"] = "completed"
             context["prereq_errors"] = len(prereq_result.errors)
             context["prereq_warnings"] = len(prereq_result.warnings)
@@ -267,8 +289,8 @@ class AutomationValidator:
         warnings: list[str] = []
         context: dict[str, str | bool | int | dict] = {"validation_type": "existing_tasks"}
 
-        if not TASKS_FILE.exists():
-            warnings.append(f"Tasks file does not exist: {TASKS_FILE}")
+        if not self.paths["TASKS_FILE"].exists():
+            warnings.append(f"Tasks file does not exist: {self.paths['TASKS_FILE']}")
             context["tasks_file_exists"] = False
             return OperationResult(
                 success=True,
@@ -283,7 +305,7 @@ class AutomationValidator:
 
         try:
             # Use our validation function
-            validation = validate_tasks_file(TASKS_FILE)
+            validation = validate_tasks_file(self.paths["TASKS_FILE"], parse_existing_tasks)
             context.update(validation.context)
             errors.extend(validation.errors)
             warnings.extend(validation.warnings)
@@ -293,7 +315,7 @@ class AutomationValidator:
 
                 # Try to load and parse tasks
                 try:
-                    content, tasks = load_tasks_file(TASKS_FILE, validate=True)
+                    content, tasks = load_tasks_file(self.paths["TASKS_FILE"], validate=True)
                     context["task_count"] = len(tasks)
                     context["parsing_status"] = "success"
 
@@ -492,7 +514,7 @@ class AutomationValidator:
         if not self.quiet:
             print(f"🔍 Starting selective automation validation ({', '.join(test_names)})...")
             print(f"📅 Validation time: {get_current_datetime()}")
-            print(f"📁 Root directory: {ROOT}")
+            print(f"📁 Root directory: {self.paths['ROOT']}")
             print("")
 
         # Map test names to display names
@@ -571,7 +593,7 @@ class AutomationValidator:
         if not self.quiet:
             print("🔍 Starting comprehensive automation validation...")
             print(f"📅 Validation time: {get_current_datetime()}")
-            print(f"📁 Root directory: {ROOT}")
+            print(f"📁 Root directory: {self.paths['ROOT']}")
             print("")
 
         # Run all validation tests
@@ -641,7 +663,7 @@ class AutomationValidator:
         )
 
 
-def main(argv=None):
+def main(argv=None, root_override=None):
     """Main entry point for validation script."""
     parser = argparse.ArgumentParser(
         description="Validate task automation system components",
@@ -690,7 +712,9 @@ Examples:
     args = parser.parse_args(argv)
 
     # Create validator
-    validator = AutomationValidator(quiet=args.quiet, format_type=args.format)
+    validator = AutomationValidator(
+        quiet=args.quiet, format_type=args.format, root_override=root_override
+    )
 
     # Handle list-tests option
     if args.list_tests:
