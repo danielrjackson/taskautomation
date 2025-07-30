@@ -28,15 +28,14 @@ Options:
 from __future__ import annotations
 
 import argparse
-import pathlib
 import sys
 import traceback
+from collections.abc import Callable
 
-# Add the parent directory to the path to import task_utils
-sys.path.insert(0, str(pathlib.Path(__file__).parent))
+# Using proper package imports now
 
 try:
-    from task_utils import (
+    from .task_utils import (
         ROOT,
         TASKS_FILE,
         ExitCode,
@@ -65,7 +64,7 @@ class AutomationValidator:
     def __init__(self, quiet: bool = False, format_type: str = "human"):
         self.quiet = quiet
         self.format_type = format_type
-        self.results = []
+        self.results: list[OperationResult] = []
         self.overall_success = True
 
     def log_result(self, result: OperationResult) -> None:
@@ -79,9 +78,9 @@ class AutomationValidator:
 
     def validate_module_imports(self) -> OperationResult:
         """Validate that all required modules can be imported."""
-        errors = []
-        warnings = []
-        context = {"validation_type": "module_imports"}
+        errors: list[str] = []
+        warnings: list[str] = []
+        context: dict[str, str | bool] = {"validation_type": "module_imports"}
 
         # Test critical imports
         required_modules = [
@@ -105,7 +104,7 @@ class AutomationValidator:
 
         # Test task_utils specific imports
         try:
-            from task_utils import (
+            from .task_utils import (
                 ID_RE,
                 METADATA_RE,
                 SUBTASK_RE,
@@ -129,15 +128,15 @@ class AutomationValidator:
 
     def validate_file_structure(self) -> OperationResult:
         """Validate that required files and directories exist."""
-        errors = []
-        warnings = []
-        context = {"validation_type": "file_structure"}
+        errors: list[str] = []
+        warnings: list[str] = []
+        context: dict[str, str | bool] = {"validation_type": "file_structure"}
 
         # Check required files
         required_files = [
-            ROOT / "scripts" / "dev" / "task_utils.py",
-            ROOT / "scripts" / "dev" / "run_tests.py",
-            ROOT / "scripts" / "dev" / "create_change_entry.py",
+            ROOT / "src" / "taskautomation" / "task_utils.py",
+            ROOT / "src" / "taskautomation" / "run_tests.py",
+            ROOT / "src" / "taskautomation" / "create_change_entry.py",
         ]
 
         for file_path in required_files:
@@ -159,7 +158,7 @@ class AutomationValidator:
         # Check required directories
         required_dirs = [
             ROOT / "docs",
-            ROOT / "scripts" / "dev",
+            ROOT / "src" / "taskautomation",
             ROOT / "docs" / "planning",
         ]
 
@@ -182,9 +181,9 @@ class AutomationValidator:
 
     def test_validation_functions(self) -> OperationResult:
         """Test the validation functions with known good and bad data."""
-        errors = []
-        warnings = []
-        context = {"validation_type": "function_testing"}
+        errors: list[str] = []
+        warnings: list[str] = []
+        context: dict[str, str | int] = {"validation_type": "function_testing"}
 
         # Test TaskInfo validation with good data
         try:
@@ -246,7 +245,7 @@ class AutomationValidator:
 
         # Test prerequisite validation
         try:
-            prereq_result = validate_prerequisites()
+            prereq_result = validate_prerequisites(ROOT)
             context["prerequisite_validation"] = "completed"
             context["prereq_errors"] = len(prereq_result.errors)
             context["prereq_warnings"] = len(prereq_result.warnings)
@@ -264,9 +263,9 @@ class AutomationValidator:
 
     def validate_existing_tasks(self) -> OperationResult:
         """Validate the existing tasks file if it exists."""
-        errors = []
-        warnings = []
-        context = {"validation_type": "existing_tasks"}
+        errors: list[str] = []
+        warnings: list[str] = []
+        context: dict[str, str | bool | int | dict] = {"validation_type": "existing_tasks"}
 
         if not TASKS_FILE.exists():
             warnings.append(f"Tasks file does not exist: {TASKS_FILE}")
@@ -299,8 +298,8 @@ class AutomationValidator:
                     context["parsing_status"] = "success"
 
                     # Analyze task distribution
-                    priorities = {}
-                    assignees = {}
+                    priorities: dict[str, int] = {}
+                    assignees: dict[str, int] = {}
                     completion_status = {"completed": 0, "in_progress": 0}
 
                     for task in tasks.values():
@@ -338,9 +337,9 @@ class AutomationValidator:
 
     def test_git_integration(self) -> OperationResult:
         """Test git integration functions."""
-        errors = []
-        warnings = []
-        context = {"validation_type": "git_integration"}
+        errors: list[str] = []
+        warnings: list[str] = []
+        context: dict[str, str | bool] = {"validation_type": "git_integration"}
 
         try:
             git_info = get_git_info()
@@ -378,9 +377,9 @@ class AutomationValidator:
 
     def test_output_formats(self) -> OperationResult:
         """Test JSON and human output formats."""
-        errors = []
-        warnings = []
-        context = {"validation_type": "output_formats"}
+        errors: list[str] = []
+        warnings: list[str] = []
+        context: dict[str, str] = {"validation_type": "output_formats"}
 
         try:
             # Create a test result
@@ -434,6 +433,137 @@ class AutomationValidator:
             data=context,
             errors=errors,
             warnings=warnings,
+        )
+
+    def get_available_tests(self) -> dict[str, Callable[[], OperationResult]]:
+        """Get dictionary of available validation tests."""
+        return {
+            "imports": self.validate_module_imports,
+            "structure": self.validate_file_structure,
+            "functions": self.test_validation_functions,
+            "tasks": self.validate_existing_tasks,
+            "git": self.test_git_integration,
+            "output": self.test_output_formats,
+        }
+
+    def list_available_tests(self) -> None:
+        """List available validation tests."""
+        tests = self.get_available_tests()
+
+        if self.format_type == "json":
+            import json
+
+            output = {
+                "available_tests": list(tests.keys()),
+                "descriptions": {
+                    "imports": "Validate that all required modules can be imported",
+                    "structure": "Validate that required files and directories exist",
+                    "functions": "Test validation functions with known good and bad data",
+                    "tasks": "Validate existing tasks file if it exists",
+                    "git": "Test git integration functions",
+                    "output": "Test JSON and human output formats",
+                },
+            }
+            print(json.dumps(output, indent=2))
+        else:
+            print("Available validation tests:")
+            print("  imports    - Validate that all required modules can be imported")
+            print("  structure  - Validate that required files and directories exist")
+            print("  functions  - Test validation functions with known good and bad data")
+            print("  tasks      - Validate existing tasks file if it exists")
+            print("  git        - Test git integration functions")
+            print("  output     - Test JSON and human output formats")
+            print("\nUsage: --tests imports,git,structure")
+
+    def run_selective_validation(self, test_names: list[str]) -> OperationResult:
+        """Run only the specified validation tests."""
+        available_tests = self.get_available_tests()
+
+        # Validate test names
+        invalid_tests = [name for name in test_names if name not in available_tests]
+        if invalid_tests:
+            return create_structured_error(
+                f"Invalid test names: {', '.join(invalid_tests)}",
+                ExitCode.VALIDATION_ERROR,
+                [f"Available tests: {', '.join(available_tests.keys())}"],
+                {"invalid_tests": invalid_tests, "available_tests": list(available_tests.keys())},
+            )
+
+        if not self.quiet:
+            print(f"🔍 Starting selective automation validation ({', '.join(test_names)})...")
+            print(f"📅 Validation time: {get_current_datetime()}")
+            print(f"📁 Root directory: {ROOT}")
+            print("")
+
+        # Map test names to display names
+        test_display_names = {
+            "imports": "Module Imports",
+            "structure": "File Structure",
+            "functions": "Validation Functions",
+            "tasks": "Existing Tasks",
+            "git": "Git Integration",
+            "output": "Output Formats",
+        }
+
+        # Run selected validation tests
+        for test_name in test_names:
+            display_name = test_display_names.get(test_name, test_name.title())
+            test_func = available_tests[test_name]
+
+            if not self.quiet:
+                print(f"🧪 Running {display_name} validation...")
+
+            try:
+                result = test_func()
+                self.log_result(result)
+            except Exception as e:
+                error_result = create_structured_error(
+                    f"{display_name} validation failed with exception",
+                    ExitCode.SYSTEM_ERROR,
+                    [f"Exception: {e}", f"Traceback: {traceback.format_exc()}"],
+                    {"test_name": test_name},
+                )
+                self.log_result(error_result)
+
+            if not self.quiet:
+                print("")
+
+        # Generate summary
+        total_tests = len(self.results)
+        passed_tests = sum(1 for r in self.results if r.success)
+        failed_tests = total_tests - passed_tests
+
+        total_errors = sum(len(r.errors) for r in self.results)
+        total_warnings = sum(len(r.warnings) for r in self.results)
+
+        summary_data = {
+            "validation_time": get_current_datetime(),
+            "selected_tests": test_names,
+            "total_tests": total_tests,
+            "passed_tests": passed_tests,
+            "failed_tests": failed_tests,
+            "total_errors": total_errors,
+            "total_warnings": total_warnings,
+            "overall_success": self.overall_success,
+        }
+
+        if self.overall_success:
+            message = f"✅ All {total_tests} selected validation tests passed"
+            exit_code = ExitCode.SUCCESS
+        else:
+            message = f"❌ {failed_tests}/{total_tests} selected validation tests failed"
+            exit_code = ExitCode.VALIDATION_ERROR
+
+        if total_warnings > 0:
+            message += f" ({total_warnings} warnings)"
+
+        return OperationResult(
+            success=self.overall_success,
+            exit_code=exit_code,
+            message=message,
+            data=summary_data,
+            errors=[],
+            warnings=[],
         )
 
     def run_comprehensive_validation(self) -> OperationResult:
@@ -522,6 +652,8 @@ Examples:
     %(prog)s --format json      # Run validations with JSON output
     %(prog)s --quiet            # Run validations quietly
     %(prog)s --fix-issues       # Attempt to fix detected issues (dry-run)
+    %(prog)s --tests imports,git  # Run only specific validation tests
+    %(prog)s --list-tests       # List available validation tests
         """,
     )
 
@@ -544,13 +676,32 @@ Examples:
         "--dry-run", action="store_true", help="Preview fixes without applying them"
     )
 
+    parser.add_argument(
+        "--tests",
+        help="Comma-separated list of specific tests to run. Use --list-tests to see available options",
+    )
+
+    parser.add_argument(
+        "--list-tests",
+        action="store_true",
+        help="List available validation tests and exit",
+    )
+
     args = parser.parse_args(argv)
 
     # Create validator
     validator = AutomationValidator(quiet=args.quiet, format_type=args.format)
 
-    # Run comprehensive validation
-    result = validator.run_comprehensive_validation()
+    # Handle list-tests option
+    if args.list_tests:
+        validator.list_available_tests()
+        sys.exit(0)
+
+    # Run validation (selective or comprehensive)
+    if args.tests:
+        result = validator.run_selective_validation(args.tests.split(","))
+    else:
+        result = validator.run_comprehensive_validation()
 
     # Output final result
     if not args.quiet or args.format == "json":
